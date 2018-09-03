@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+import cmd
+
+from arkham.basic import Deck, Investigator, InvestigatorCard, Round
+from arkham.phases import Lobby, Game
+
+
+class ArkhamShell(cmd.Cmd):
+    prompt = '> '
+
+    def __init__(self, completekey='tab', stdin=None, stdout=None):
+        super().__init__(completekey, stdin, stdout)
+
+        self.round = None
+
+    def preloop(self):
+        self.round = Round([
+            Investigator('Roland Banks', Deck([InvestigatorCard('Roland\'s #%d' % i) for i in range(1, 31)])),
+            Investigator('Wendy Adams', Deck([InvestigatorCard('Wendy\'s #%d' % i) for i in range(1, 31)])),
+        ])
+
+    # def preloop(self):
+    #     self.locations = {location.name: location for location in [
+    #         Location('Study', 2, 2, []),
+    #     ]}
+    #     self.investigator = Investigator('Roland Banks')
+    #     self.investigator.move(self.locations['Study'])
+
+    def do_quit(self, arg):
+        """Quit the game."""
+        return True
+
+    def do_advance(self, arg):
+        """Advance to the next phase."""
+        self.round.advance()
+
+
+class TestShell(cmd.Cmd):
+    cards = [
+        'Mage Slayer (Alara Reborn)',
+        'Magefire Wings (Alara Reborn)',
+        'Sages of the Anima (Alara Reborn)',
+        'Sanctum Plowbeast (Alara Reborn)',
+        'Sangrite Backlash (Alara Reborn)',
+        'Sanity Gnawers (Alara Reborn)',
+        'Sen Triplets (Alara Reborn)'
+    ]
+
+    # def __init__(self):
+    #     cmd.Cmd.__init__(self)
+
+    def do_quit(self, s):
+        return True
+
+    def do_add(self, s):
+        print(s)
+
+    def complete_add(self, text, line, start_index, end_index):
+        if text:
+            completions = [card for card in self.cards if card.startswith(text)]
+        else:
+            completions = self.cards[:]
+
+        return completions
+
+    # def complete_add(self, text, line, begidx, endidx):
+    #     mline = line.partition(' ')[2]
+    #     offs = len(mline) - len(text)
+    #     return [s[offs:] for s in completions if s.startswith(mline)]
+
+
+if __name__ == '__main__':
+    import readline
+    import rlcompleter
+
+    if 'libedit' in readline.__doc__:
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        readline.parse_and_bind("tab: complete")
+
+    Game()
+
+    # ArkhamShell().cmdloop(intro='Arkham Horror LCG')
+    # TestShell().cmdloop()
