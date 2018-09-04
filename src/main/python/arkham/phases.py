@@ -1,6 +1,8 @@
 import random
 from typing import Optional
 
+from arkham.game import Game
+
 
 class State:
     label = None
@@ -68,6 +70,7 @@ class Finish(State):
 
 class Program:
     def __init__(self):
+        self.game = Game()
         self.state = Lobby(self)
 
     def handle(self):
