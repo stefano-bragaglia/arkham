@@ -2,24 +2,12 @@ from cmd import Cmd
 
 from sty import ef, fg, rs
 
+from arkham.investigators import pool
+
 welcome = ef.italic + fg.da_yellow + 'Welcome to' + rs.all
 title = ef.bold + fg.da_green + 'ARKHAM HORROR' + rs.all
 tag_line = fg.green + 'The Card Game' + rs.all
 icons = '3👤 3📓 4✊🏼 2👞'
-
-investigators = {
-    'Roland': 'Roland Banks (Guardian, Core Set)',
-    'Banks': 'Roland Banks (Guardian, Core Set)',
-    'Daisy': 'Daisy Walker (Seeker, Core Set)',
-    'Walker': 'Daisy Walker (Seeker, Core Set)',
-    'Skids': '"Skids" O\'Toole (Rogue, Core Set)',
-    '"Skids"': '"Skids" O\'Toole (Rogue, Core Set)',
-    'O\'Toole': '"Skids" O\'Toole (Rogue, Core Set)',
-    'Agnes': 'Agnes Baker (Mystic, Core Set)',
-    'Baker': 'Agnes Baker (Mystic, Core Set)',
-    'Wendy': 'Wendy Adams (Survivor, Core Set)',
-    'Adams': 'Wendy Adams (Survivor, Core Set)',
-}
 
 selected = []
 
@@ -33,8 +21,8 @@ class Phase:
 
 
 class Lobby(Cmd, Phase):
-    intro = '\n'.join(line for line in [welcome, title, tag_line, icons])
-    prompt = '\n' + fg.li_red + '> ' + rs.all
+    intro = 'Welcome to ARKHAM HORROR The Card Game'
+    prompt = '\n> '
 
     def __init__(self, game: 'Game', completekey='tab', stdin=None, stdout=None):
         super().__init__(completekey, stdin, stdout)
@@ -52,48 +40,74 @@ class Lobby(Cmd, Phase):
 
     def do_add(self, arg):
         """Add the given investigator to the game."""
-        if arg not in investigators.values():
-            print('Unknown investigator: select an investigator to add (double TAB to autocomplete).')
-        elif arg in selected:
-            print('%s has been already selected.' % arg)
-        else:
-            selected.append(arg)
-            print('The following investigators have been selected:', *selected, sep='\n* ')
+        for investigator in pool.investigators:
+            if arg == str(investigator):
+                if investigator in selected:
+                    print('%s has been already selected.' % arg)
+                else:
+                    selected.append(investigator)
+                    print('%s has been selected.' % arg)
+                    print()
+                    self._print_selected()
+                return
+
+        print('Unknown investigator: select an investigator to add (double TAB to autocomplete).')
 
     def complete_add(self, text, line, start_index, end_index):
         completions = []
-        for key, value in investigators.items():
-            if value not in selected and (
-                    not text or key.lower().startswith(text.lower())) and value not in completions:
-                completions.append(value)
+        for word, investigator in pool.get_completion().items():
+            if investigator not in selected:
+                value = str(investigator)
+                if (not text or word.startswith(text.lower())) and value not in completions:
+                    completions.append(value)
 
         return completions
 
     def do_remove(self, arg):
         """Remove the given investigator from the game."""
-        if arg not in investigators.values():
-            print('Unknown investigator: select an investigator to remove (double TAB to autocomplete).')
-        elif arg not in selected:
-            print('%s has not been selected.' % arg)
-        else:
-            selected.remove(arg)
-            print('The following investigators have been selected:', *selected, sep='\n* ')
+        for investigator in pool.investigators:
+            if arg == str(investigator):
+                if investigator in selected:
+                    selected.remove(investigator)
+                    print('%s has been deselected.' % arg)
+                    print()
+                    self._print_selected()
+                else:
+                    print('%s was not selected.' % arg)
+                return
+
+        print('Unknown investigator: select an investigator to remove (double TAB to autocomplete).')
 
     def complete_remove(self, text, line, start_index, end_index):
         completions = []
-        for value in selected:
-            if (not text or value.lower().startswith(text.lower())) and value not in completions:
-                completions.append(value)
+        for word, investigator in pool.get_completion().items():
+            if investigator in selected:
+                value = str(investigator)
+                if (not text or word.startswith(text.lower())) and value not in completions:
+                    completions.append(value)
 
         return completions
 
     def do_list(self, arg):
         """List the investigators available to select."""
-        available = []
-        for investigator in investigators.values():
-            if investigator not in selected and investigator not in available:
-                available.append(investigator)
-        print('The following investigators are available to be selected:', *available, sep='\n* ')
+        self._print_selected()
+        self._print_available()
+
+    def _print_selected(self):
+        if not selected:
+            print('No investigator is currently selected.')
+        else:
+            print('The following investigators are currently selected:')
+            for selection in selected:
+                print('* %s' % str(selection))
+
+    def _print_available(self):
+        available = [investigator for investigator in pool.investigators if investigator not in selected]
+        if available:
+            print()
+            print('The following investigators are available for selection:')
+            for investigator in available:
+                print('* %s' % str(investigator))
 
     def do_start(self):
         """Start the game."""
