@@ -123,7 +123,8 @@ class UpkeepPhase(Phase):
 The Upkeep Phase
 Resolve these steps, in order:
 1. Each investigator turns his mini card faceup.
-2. Ready all exhausted cards. Each unengaged enemy that readies at the same location as an investigator engages at this time.
+2. Ready all exhausted cards. Each unengaged enemy that readies at the same location as an investigator engages at this 
+   time.
 3. Each investigator draws 1 card and gains 1 resource.
 4. Each investigator with more than 8 cards in hand chooses and discards cards from his hand until only 8 cards remain.
 After the above steps are complete, the round is over. Proceed to the Mythos phase of the next round.

@@ -34,8 +34,9 @@ def set_properties(project):
         "__init__",
         "arkham",
         "arkham.basic",
-        "arkham.investigators",
         "arkham.phases",
+        "arkham.newer",
+        "arkham.investigators",
     ])
     
     project.set_property("coverage_threshold_warn", 35)  # default is 70

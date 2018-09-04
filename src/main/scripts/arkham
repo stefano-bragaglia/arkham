@@ -2,7 +2,7 @@
 import cmd
 
 from arkham.basic import Deck, Investigator, InvestigatorCard, Round
-from arkham.phases import Lobby, Game
+from arkham.phases import Program
 
 
 class ArkhamShell(cmd.Cmd):
@@ -71,14 +71,13 @@ class TestShell(cmd.Cmd):
 
 if __name__ == '__main__':
     import readline
-    import rlcompleter
 
     if 'libedit' in readline.__doc__:
         readline.parse_and_bind("bind ^I rl_complete")
     else:
         readline.parse_and_bind("tab: complete")
 
-    Game()
+    Program().handle()
 
     # ArkhamShell().cmdloop(intro='Arkham Horror LCG')
     # TestShell().cmdloop()
