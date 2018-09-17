@@ -1,0 +1,158 @@
+{
+  "deck": [
+    {
+      "back": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Study",
+        "actions": [],
+        "flavour": "You've been investigating the strange events occurring in Arkham for several days now. Your deck in covered in newspaper articles, police reports, and witness accounts.",
+        "artist": "Yoann Boissonnet",
+        "set": "Core Set",
+        "set-n": "111",
+        "encounter": "The Gathering",
+        "encounter-n": "8"
+      },
+      "front": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Study",
+        "shroud": "2",
+        "clues": "2x",
+        "actions": [],
+        "victory": "0",
+        "flavour": "The door to your study has vanished.",
+        "artist": "Yoann Boissonnet",
+        "set": "Core Set",
+        "set-n": "111",
+        "encounter": "The Gathering",
+        "encounter-n": "8"
+      }
+    },
+    {
+      "back": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Hallway",
+        "actions": [],
+        "flavour": "A moment of panic and disorientation strikes as you land upon the floor of the hallway. The world spins, as if turned on its head.",
+        "artist": "Yoann Boissonnet",
+        "set": "Core Set",
+        "set-n": "112",
+        "encounter": "The Gathering",
+        "encounter-n": "9"
+      },
+      "front": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Hallway",
+        "shroud": "1",
+        "clues": "0",
+        "actions": [],
+        "victory": "0",
+        "flavour": "The walls of your house are splattered with mud, and your hardwood floor is gone, replaced with a dirt path.",
+        "artist": "Yoann Boissonnet",
+        "set": "Core Set",
+        "set-n": "112",
+        "encounter": "The Gathering",
+        "encounter-n": "9"
+      }
+    },
+    {
+      "back": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Attic",
+        "actions": [],
+        "flavour": "The smell of rotten meat assaults your nostrils as you approach the attic stairs.",
+        "artist": "Yoann Boissonnet",
+        "set": "Core Set",
+        "set-n": "113",
+        "encounter": "The Gathering",
+        "encounter-n": "10"
+      },
+      "front": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Attic",
+        "shroud": "1",
+        "clues": "2",
+        "actions": [
+          "Forced - After you enter the Attic: Take 1 horror."
+        ],
+        "victory": "1",
+        "flavour": "The bloody carcass of a malformed beast swings from a meat hook chained to the ceiling. Blood drains slowly from the carcass, dripping into a small barrel.",
+        "artist": "Yoann Boissonnet",
+        "set": "Core Set",
+        "set-n": "113",
+        "encounter": "The Gathering",
+        "encounter-n": "10"
+      }
+    },
+    {
+      "back": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Cellar",
+        "actions": [],
+        "flavour": "The stairs leading down to your cellar are slick, and they glisten with a thin layer of ice...",
+        "artist": "Yoann Boissonnet",
+        "set": "Core Set",
+        "set-n": "114",
+        "encounter": "The Gathering",
+        "encounter-n": "11"
+      },
+      "front": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Cellar",
+        "shroud": "4",
+        "clues": "2x",
+        "actions": [
+          "Forced - After you enter the Cellar: Take 1 damage."
+        ],
+        "victory": "1",
+        "flavour": "Your cellar seems to have been replaced with an underground network of icy tunnels and caverns. The cold chills you to the bone.",
+        "artist": "Dimitri Bielak",
+        "set": "Core Set",
+        "set-n": "114",
+        "encounter": "The Gathering",
+        "encounter-n": "11"
+      }
+    },
+    {
+      "back": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Parlor",
+        "actions": [
+          "The entrance to the Parlor is blocked by a darkly glowing unfathomable barrier. You cannot move into the Parlor."
+        ],
+        "flavour": "You're unsure what would happen if you tried to cross the threshold of the strange barrier, but based on its extreme heat, you sure as hell don't want to try.",
+        "artist": "Yoann Boissonnet",
+        "set": "Core Set",
+        "set-n": "115",
+        "encounter": "The Gathering",
+        "encounter-n": "12"
+      },
+      "front": {
+        "class": "Mythos",
+        "type": "Location",
+        "name": "Cellar",
+        "shroud": "2",
+        "clues": "0",
+        "actions": [
+          "<action>: Resign. \"This is too much for me!\" You run out the front door, fleeing in panic.",
+          "While Lita Chantler is not controlled by a player, she gains: \"<action>: Parley. Test  (4). If you succeed, take control of Lita Chantler.\""
+        ],
+        "victory": "1",
+        "flavour": "",
+        "artist": "VIKO",
+        "set": "Core Set",
+        "set-n": "115",
+        "encounter": "The Gathering",
+        "encounter-n": "12"
+      }
+    }
+  ]
+}

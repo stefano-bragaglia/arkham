@@ -34,6 +34,7 @@ def set_properties(project):
         "__init__",
         "arkham",
         "arkham.basic",
+        "arkham.game",
         "arkham.phases",
         "arkham.newer",
         "arkham.investigators",
