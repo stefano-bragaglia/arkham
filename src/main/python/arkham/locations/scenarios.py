@@ -1,6 +1,9 @@
 from typing import Iterable
 
 
+class ChaosBag:
+    
+
 class Difficulty:
     EASY = 0
     STANDARD = 1
