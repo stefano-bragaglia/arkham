@@ -62,7 +62,7 @@ class Lobby:
         self.players.discard(player)
 
     def get_game(self) -> Game:
-        return Game(None, list(self.players))
+        raise NotImplementedError
 
 
 if __name__ == '__main__':
