@@ -3,7 +3,8 @@ from typing import Iterable, List
 
 
 class ChaosBag:
-    
+    pass
+
 
 class Difficulty:
     EASY = 0
@@ -17,8 +18,6 @@ class ChaosBag:
 
     def __init__(self, tokens: List[str]):
         self._tokens = tokens
-
-    
 
 
 class Scenario:
