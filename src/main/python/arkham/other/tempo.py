@@ -1,9 +1,8 @@
 import re
 from collections import namedtuple
 from pprint import pprint
-from typing import Dict
+from typing import Dict, List
 from typing import Iterable
-from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -31,7 +30,7 @@ def term_repr(term: Term) -> str:
 
 
 class Atom:
-    def __init__(self, functor: str, terms: Tuple[Term, ...]):
+    def __init__(self, functor: str, terms: Tuple[Term, ...] = ()):
         self._functor = functor
         self._terms = terms
 
@@ -236,6 +235,9 @@ class Program:
     def clauses(self) -> Iterable[Clause]:
         return self._clauses
 
+    def get_clause(self, index: int) -> Optional[Clause]:
+        return self._clauses[index] if 0 <= index < len(self._clauses) else None
+
     def get_constants(self) -> Iterable[Term]:
         return sorted({t for c in self._clauses for l in c.literals for t in l.terms if not is_variable(t)})
 
@@ -248,18 +250,27 @@ class Program:
     def is_ground(self) -> bool:
         return all(c.is_ground() for c in self._clauses)
 
-    def derive(self, literal: Literal) -> bool:
-        derivation = []
-        for clause in self._clauses:
+    def resolve(self, literal: Literal) -> Optional[List[Tuple[int, Literal, Substitutions]]]:
+        for i, clause in enumerate(self._clauses):
             substitutions = clause.head.unify(literal)
-            if substitutions:
-                for literal in clause.body:
-                    substituted = literal.substitute(substitutions)
-                    if self.derive(substituted):
+            if substitutions is None:
+                continue
 
+            derivation = [(i, literal, substitutions)]
+            if not clause.body:
+                return derivation
 
+            for literal in clause.body:
+                substituted = literal.substitute(substitutions)
+                sub_goal = self.resolve(substituted)
+                if not sub_goal:
+                    return None
 
+                derivation = [*derivation, *sub_goal]
 
+            return derivation
+
+        return None
 
 
 def get_combinations(size: int) -> List[List[int]]:
