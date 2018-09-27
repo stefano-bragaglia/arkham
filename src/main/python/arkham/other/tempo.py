@@ -302,11 +302,14 @@ def get_stubs(head: Signature, signatures: Tuple[Signature, ...], max_size: int 
 
 
 def get_clauses(stubs: List[List[Signature]]) -> List[Clause]:
+    clauses = []
     for stub in stubs:
         size = sum(p.arity for p in stub)
         combinations = get_combinations(size)
         invariants = get_invariants(combinations)
         for indexes in invariants:
+            if indexes[:stub[0].arity] != [0, 1]:
+                continue
             if any(i not in indexes[stub[0].arity:] for i in indexes[:stub[0].arity]):
                 continue
 
@@ -318,7 +321,10 @@ def get_clauses(stubs: List[List[Signature]]) -> List[Clause]:
                     literals.append(literal)
 
             clause = Clause(literals[0], tuple(literals[1:]))
-            yield clause
+            if clause not in clauses:
+                clauses.append(clause)
+
+    return clauses
 
 
 def learn(negated: bool, name: str, arity: int, program: Program, max_size: int = 2):
@@ -327,8 +333,18 @@ def learn(negated: bool, name: str, arity: int, program: Program, max_size: int 
     stubs = get_stubs(signature, signatures, max_size)
     clauses = get_clauses(stubs)
 
-    pprint(clauses)
+    pprint([c for c in clauses])
 
+
+def foil(target: Literal, examples: List[Literal]) -> List[Clause]:
+    clauses = []
+    while any(not e.negated for e in examples):
+        # clause = new_clause(target, examples)
+        pass
+
+    return clauses
+
+# TODO derive?
 
 if __name__ == '__main__':
     # p = Program((
@@ -376,14 +392,15 @@ if __name__ == '__main__':
     positives = []
     negatives = []
     constants = program.get_constants()
+    examples = []
+
     for c1 in constants:
         for c2 in constants:
-            atom = Atom('edge', (c1, c2))
-            clause = Clause(Literal(atom))
+            clause = Clause(Literal(Atom('edge', (c1, c2))))
             if clause not in program.clauses:
-                negatives.append(Literal(atom, True))
+                negatives.append(Literal(Atom('path', (c1, c2)), True))
             else:
-                positives.append(Literal(atom, False))
+                positives.append(Literal(Atom('path', (c1, c2)), False))
 
     pprint(positives)
     pprint(negatives)
