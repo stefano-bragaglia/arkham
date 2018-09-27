@@ -248,6 +248,19 @@ class Program:
     def is_ground(self) -> bool:
         return all(c.is_ground() for c in self._clauses)
 
+    def derive(self, literal: Literal) -> bool:
+        derivation = []
+        for clause in self._clauses:
+            substitutions = clause.head.unify(literal)
+            if substitutions:
+                for literal in clause.body:
+                    substituted = literal.substitute(substitutions)
+                    if self.derive(substituted):
+
+
+
+
+
 
 def get_combinations(size: int) -> List[List[int]]:
     combinations = [[]]
@@ -344,7 +357,6 @@ def foil(target: Literal, examples: List[Literal]) -> List[Clause]:
 
     return clauses
 
-# TODO derive?
 
 if __name__ == '__main__':
     # p = Program((
