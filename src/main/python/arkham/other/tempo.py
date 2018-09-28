@@ -1,5 +1,7 @@
 import re
 from collections import namedtuple
+from functools import lru_cache
+from math import inf, log
 from pprint import pprint
 from typing import Dict, List
 from typing import Iterable
@@ -250,6 +252,7 @@ class Program:
     def is_ground(self) -> bool:
         return all(c.is_ground() for c in self._clauses)
 
+    @lru_cache(maxsize=None)
     def resolve(self, literal: Literal) -> Optional[List[Tuple[int, Literal, Substitutions]]]:
         for i, clause in enumerate(self._clauses):
             substitutions = clause.head.unify(literal)
@@ -271,6 +274,13 @@ class Program:
             return derivation
 
         return None
+
+
+def information_gain(tp: int, fp: int) -> float:
+    if tp == 0:
+        return -inf if fp == 0 else inf
+
+    return -log(tp / (tp + fp))
 
 
 def get_combinations(size: int) -> List[List[int]]:
@@ -297,7 +307,7 @@ def get_invariants(combinations: List[List[int]]) -> List[List[int]]:
         if invariant not in invariants:
             invariants.append(invariant)
 
-    return invariants
+    return invariants[::-1]
 
 
 Signature = namedtuple('Signature', ['negated', 'name', 'arity'])
@@ -369,34 +379,36 @@ def foil(target: Literal, examples: List[Literal]) -> List[Clause]:
     return clauses
 
 
-if __name__ == '__main__':
-    # p = Program((
-    #     Clause(Literal(Atom('father', ('frank', 'abe')))),
-    #     Clause(Literal(Atom('father', ('frank', 'alan')))),
-    #     Clause(Literal(Atom('father', ('alan', 'sean')))),
-    #     Clause(Literal(Atom('father', ('sean', 'jane')))),
-    #     Clause(Literal(Atom('father', ('george', 'bob')))),
-    #     Clause(Literal(Atom('father', ('george', 'tim')))),
-    #     Clause(Literal(Atom('father', ('bob', 'jan')))),
-    #     Clause(Literal(Atom('father', ('tim', 'tom')))),
-    #     Clause(Literal(Atom('father', ('tom', 'thomas')))),
-    #     Clause(Literal(Atom('father', ('ian', 'ann')))),
-    #     Clause(Literal(Atom('father', ('thomas', 'billy')))),
-    #     Clause(Literal(Atom('mother', ('rebecca', 'alan')))),
-    #     Clause(Literal(Atom('mother', ('rebecca', 'abe')))),
-    #     Clause(Literal(Atom('mother', ('joan', 'sean')))),
-    #     Clause(Literal(Atom('mother', ('jane', 'ann')))),
-    #     Clause(Literal(Atom('mother', ('jannet', 'tim')))),
-    #     Clause(Literal(Atom('mother', ('jannet', 'bob')))),
-    #     Clause(Literal(Atom('mother', ('tammy', 'tom')))),
-    #     Clause(Literal(Atom('mother', ('tipsy', 'thomas')))),
-    #     Clause(Literal(Atom('mother', ('debrah', 'billy')))),
-    #     Clause(Literal(Atom('mother', ('jill', 'jan')))),
-    #     Clause(Literal(Atom('mother', ('jan', 'jane')))),
-    # ))
-    # print(p)
-    # print()
+def parenthood():
+    p = Program((
+        Clause(Literal(Atom('father', ('frank', 'abe')))),
+        Clause(Literal(Atom('father', ('frank', 'alan')))),
+        Clause(Literal(Atom('father', ('alan', 'sean')))),
+        Clause(Literal(Atom('father', ('sean', 'jane')))),
+        Clause(Literal(Atom('father', ('george', 'bob')))),
+        Clause(Literal(Atom('father', ('george', 'tim')))),
+        Clause(Literal(Atom('father', ('bob', 'jan')))),
+        Clause(Literal(Atom('father', ('tim', 'tom')))),
+        Clause(Literal(Atom('father', ('tom', 'thomas')))),
+        Clause(Literal(Atom('father', ('ian', 'ann')))),
+        Clause(Literal(Atom('father', ('thomas', 'billy')))),
+        Clause(Literal(Atom('mother', ('rebecca', 'alan')))),
+        Clause(Literal(Atom('mother', ('rebecca', 'abe')))),
+        Clause(Literal(Atom('mother', ('joan', 'sean')))),
+        Clause(Literal(Atom('mother', ('jane', 'ann')))),
+        Clause(Literal(Atom('mother', ('jannet', 'tim')))),
+        Clause(Literal(Atom('mother', ('jannet', 'bob')))),
+        Clause(Literal(Atom('mother', ('tammy', 'tom')))),
+        Clause(Literal(Atom('mother', ('tipsy', 'thomas')))),
+        Clause(Literal(Atom('mother', ('debrah', 'billy')))),
+        Clause(Literal(Atom('mother', ('jill', 'jan')))),
+        Clause(Literal(Atom('mother', ('jan', 'jane')))),
+    ))
+    print(p)
+    print()
 
+
+def connectedness():
     program = Program((
         Clause(Literal(Atom('edge', (0, 1)))),
         Clause(Literal(Atom('edge', (0, 3)))),
@@ -415,8 +427,6 @@ if __name__ == '__main__':
     positives = []
     negatives = []
     constants = program.get_constants()
-    examples = []
-
     for c1 in constants:
         for c2 in constants:
             clause = Clause(Literal(Atom('edge', (c1, c2))))
@@ -428,12 +438,10 @@ if __name__ == '__main__':
     pprint(positives)
     pprint(negatives)
 
-    learn(False, 'path', 2, program)
+    # learn(False, 'path', 2, program)
 
-    # print(get(1))
-    # for i in range(1, 5):
-    #     print(get(i))
-    #     print()
 
-    # for i, rule in enumerate(play('r', 2, {'p': 2, 'q': 1}, 2)):
-    #     print(i, '-', rule)
+if __name__ == '__main__':
+    print(get_invariants(get_combinations(2)))
+    print()
+    print(get_invariants(get_combinations(4)))
