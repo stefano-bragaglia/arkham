@@ -319,48 +319,45 @@ class Program:
 
         return None
 
-    def learn(self, negated: bool, functor: str, arity: int, positives: List[Literal], negatives: List[Literal]) -> \
-            List[Clause]:
+    def learn(self, target: Literal, positives: List[Literal], negatives: List[Literal]) -> List[Clause]:
         signatures = []
         for clause in self._clauses:
             signature = (clause.head.negated, clause.head.functor, clause.head.get_arity())
             if signature not in signatures:
                 signatures.append(signature)
-        if (negated, functor, arity) not in signatures:
-            signatures.append((negated, functor, arity))
+        if (target.negated, target.functor, target.get_arity()) not in signatures:
+            signatures.append((target.negated, target.functor, target.get_arity()))
 
         clauses = []
-        for target in get_invariants(get_combinations(arity)):
-            head = Literal(Atom(functor, tuple('V%d' % i for i in target)))
-            body = ()
+
+        body = ()
+
+        tp, fp = 0, len(negatives)
+        while tp < len(positives):
+            best, value = None, -inf
             for signature in signatures:
                 for indexes in get_combinations(signature[2]):
                     literal = Literal(Atom(signature[1], tuple('V%d' % i for i in indexes)), signature[0])
-                    clause = Clause(head, (*body, literal))
+                    clause = Clause(target, (*body, literal))
 
-                    if any(t not in literal.terms for t in head.terms):
+                    if any(t not in literal.terms for t in target.terms):
                         continue
 
-                    if head == literal:
+                    if target.functor == literal.functor and set(target.terms) == set(literal.terms):
                         continue
 
                     prog = Program((*clauses, clause, *self._clauses))
-                    print(prog)
-                    for p in positives:
-                        print('+)', p, ':', bool(prog.resolve(p)))
-                    for n in negatives:
-                        print('-)', n, ':', bool(prog.resolve(n)))
-                    tp = sum(1 for p in positives if bool(prog.resolve(p)))
-                    fp = sum(1 for n in negatives if not bool(prog.resolve(n)))
-                    print('IG:', information_gain(tp, fp))
-                    print()
-                    print()
+                    current_tp = sum(1 for p in positives if bool(prog.resolve(p)))
+                    current_fp = sum(1 for n in negatives if not bool(prog.resolve(n)))
+                    gain = information_gain(current_tp, current_fp)
+                    if not best or gain > value:
+                        best = clause
+                        value = gain
+                        tp = current_tp
+                        fp = current_fp
 
-        # clauses = []
-        # target = Literal(Atom(functor, tuple('V%d' %)))
-        # while any(not e.negated for e in examples):
-        #     # clause = new_clause(target, examples)
-        #     pass
+            if best:
+                clauses.append(best)
 
         return clauses
 
@@ -511,7 +508,9 @@ def abstract():
     # else:
     #     print('NO')
 
-    program.learn(False, 'q', 2, [Literal(Atom('q', (2, 1)))], [])
+    result = program.learn(Literal(Atom('q', ('V0', 'V1'))), [Literal(Atom('q', (2, 1)))], [])
+    for clause in result:
+        print('\t', clause)
 
 
 if __name__ == '__main__':
