@@ -252,7 +252,7 @@ class Program:
     def is_ground(self) -> bool:
         return all(c.is_ground() for c in self._clauses)
 
-    @lru_cache(maxsize=None)
+    # @lru_cache(maxsize=None)
     def resolve(self, literal: Literal) -> Optional[List[Tuple[int, Literal, Substitutions]]]:
         for i, clause in enumerate(self._clauses):
             substitutions = clause.head.unify(literal)
@@ -441,7 +441,25 @@ def connectedness():
     # learn(False, 'path', 2, program)
 
 
+def abstract():
+    program = Program((
+        Clause(Literal(Atom('q', ('X', 'Y'))), (Literal(Atom('p', ('Y', 'X'))), )),
+        Clause(Literal(Atom('p', (1, 2)))),
+    ))
+    print(program)
+    print()
+    derivation = program.resolve(Literal(Atom('q', (2, 1))))
+    if derivation:
+        print('YES')
+        for step in derivation:
+            print('    ', program.get_clause(step[0]), '  /  ', step[2], '  /  ', step[1])
+    else:
+        print('NO')
+
+
 if __name__ == '__main__':
+    abstract()
+
     print(get_invariants(get_combinations(2)))
     print()
     print(get_invariants(get_combinations(4)))
