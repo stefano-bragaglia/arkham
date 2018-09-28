@@ -1,6 +1,5 @@
 import re
 from collections import namedtuple
-from functools import lru_cache
 from math import inf, log
 from pprint import pprint
 from typing import Dict, List
@@ -31,13 +30,44 @@ def term_repr(term: Term) -> str:
     return repr(term)
 
 
+def get_combinations(size: int) -> List[List[int]]:
+    combinations = [[]]
+    for _ in range(size):
+        updates = []
+        for combination in combinations:
+            for current in range(size):
+                update = [*combination, current]
+                updates.append(update)
+        combinations = updates
+
+    return combinations
+
+
+def get_invariants(combinations: List[List[int]]) -> List[List[int]]:
+    invariants = []
+    for combination in combinations:
+        mapping = {}
+        invariant = []
+        for index in combination:
+            value = mapping.setdefault(index, len(mapping))
+            invariant.append(value)
+        if invariant not in invariants:
+            invariants.append(invariant)
+
+    return invariants[::-1]
+
+
 class Atom:
     def __init__(self, functor: str, terms: Tuple[Term, ...] = ()):
         self._functor = functor
         self._terms = terms
 
     def __hash__(self) -> int:
-        return hash(self._functor) ** hash(self._terms)
+        value = hash(self._functor)
+        for term in self._terms:
+            value = value ** hash(term)
+
+        return value
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Atom):
@@ -165,7 +195,11 @@ class Clause:
         self._body = body
 
     def __hash__(self) -> int:
-        return hash(self._head) ** hash(self._body)
+        value = hash(self._head)
+        for literal in self._body:
+            value = value ** hash(literal)
+
+        return value
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Clause):
@@ -217,9 +251,14 @@ class Clause:
 class Program:
     def __init__(self, clauses: Tuple[Clause, ...]):
         self._clauses = clauses
+        self._tabling = {}
 
     def __hash__(self) -> int:
-        return hash(self._clauses)
+        value = 1
+        for clause in self._clauses:
+            value = value ** hash(clause)
+
+        return value
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Program):
@@ -252,19 +291,24 @@ class Program:
     def is_ground(self) -> bool:
         return all(c.is_ground() for c in self._clauses)
 
-    # @lru_cache(maxsize=None)
-    def resolve(self, literal: Literal) -> Optional[List[Tuple[int, Literal, Substitutions]]]:
+    def resolve(self, query: Literal) -> Optional[List[Tuple[int, Literal, Substitutions]]]:
+        if not query.is_ground():
+            raise ValueError("'query' must be ground: %s" % query)
+
+        return self._tabling.setdefault(query, self._resolve(query))
+
+    def _resolve(self, query: Literal) -> Optional[List[Tuple[int, Literal, Substitutions]]]:
         for i, clause in enumerate(self._clauses):
-            substitutions = clause.head.unify(literal)
+            substitutions = clause.head.unify(query)
             if substitutions is None:
                 continue
 
-            derivation = [(i, literal, substitutions)]
+            derivation = [(i, query, substitutions)]
             if not clause.body:
                 return derivation
 
-            for literal in clause.body:
-                substituted = literal.substitute(substitutions)
+            for query in clause.body:
+                substituted = query.substitute(substitutions)
                 sub_goal = self.resolve(substituted)
                 if not sub_goal:
                     return None
@@ -275,39 +319,57 @@ class Program:
 
         return None
 
+    def learn(self, negated: bool, functor: str, arity: int, positives: List[Literal], negatives: List[Literal]) -> \
+            List[Clause]:
+        signatures = []
+        for clause in self._clauses:
+            signature = (clause.head.negated, clause.head.functor, clause.head.get_arity())
+            if signature not in signatures:
+                signatures.append(signature)
+        if (negated, functor, arity) not in signatures:
+            signatures.append((negated, functor, arity))
+
+        clauses = []
+        for target in get_invariants(get_combinations(arity)):
+            head = Literal(Atom(functor, tuple('V%d' % i for i in target)))
+            body = ()
+            for signature in signatures:
+                for indexes in get_combinations(signature[2]):
+                    literal = Literal(Atom(signature[1], tuple('V%d' % i for i in indexes)), signature[0])
+                    clause = Clause(head, (*body, literal))
+
+                    if any(t not in literal.terms for t in head.terms):
+                        continue
+
+                    if head == literal:
+                        continue
+
+                    prog = Program((*clauses, clause, *self._clauses))
+                    print(prog)
+                    for p in positives:
+                        print('+)', p, ':', bool(prog.resolve(p)))
+                    for n in negatives:
+                        print('-)', n, ':', bool(prog.resolve(n)))
+                    tp = sum(1 for p in positives if bool(prog.resolve(p)))
+                    fp = sum(1 for n in negatives if not bool(prog.resolve(n)))
+                    print('IG:', information_gain(tp, fp))
+                    print()
+                    print()
+
+        # clauses = []
+        # target = Literal(Atom(functor, tuple('V%d' %)))
+        # while any(not e.negated for e in examples):
+        #     # clause = new_clause(target, examples)
+        #     pass
+
+        return clauses
+
 
 def information_gain(tp: int, fp: int) -> float:
     if tp == 0:
         return -inf if fp == 0 else inf
 
     return -log(tp / (tp + fp))
-
-
-def get_combinations(size: int) -> List[List[int]]:
-    combinations = [[]]
-    for _ in range(size):
-        updates = []
-        for combination in combinations:
-            for current in range(size):
-                update = [*combination, current]
-                updates.append(update)
-        combinations = updates
-
-    return combinations
-
-
-def get_invariants(combinations: List[List[int]]) -> List[List[int]]:
-    invariants = []
-    for combination in combinations:
-        mapping = {}
-        invariant = []
-        for index in combination:
-            value = mapping.setdefault(index, len(mapping))
-            invariant.append(value)
-        if invariant not in invariants:
-            invariants.append(invariant)
-
-    return invariants[::-1]
 
 
 Signature = namedtuple('Signature', ['negated', 'name', 'arity'])
@@ -368,15 +430,6 @@ def learn(negated: bool, name: str, arity: int, program: Program, max_size: int 
     clauses = get_clauses(stubs)
 
     pprint([c for c in clauses])
-
-
-def foil(target: Literal, examples: List[Literal]) -> List[Clause]:
-    clauses = []
-    while any(not e.negated for e in examples):
-        # clause = new_clause(target, examples)
-        pass
-
-    return clauses
 
 
 def parenthood():
@@ -443,23 +496,23 @@ def connectedness():
 
 def abstract():
     program = Program((
-        Clause(Literal(Atom('q', ('X', 'Y'))), (Literal(Atom('p', ('Y', 'X'))), )),
+        # Clause(Literal(Atom('q', ('X', 'Y'))), (Literal(Atom('p', ('Y', 'X'))),)),
         Clause(Literal(Atom('p', (1, 2)))),
     ))
     print(program)
-    print()
-    derivation = program.resolve(Literal(Atom('q', (2, 1))))
-    if derivation:
-        print('YES')
-        for step in derivation:
-            print('    ', program.get_clause(step[0]), '  /  ', step[2], '  /  ', step[1])
-    else:
-        print('NO')
+    # print()
+    # derivation = program.resolve(Literal(Atom('q', (2, 1))))
+    # if derivation:
+    #     print('YES')
+    #     for step in derivation:
+    #         clause = program.get_clause(step[0])
+    #         subs = '{%s}' % ', '.join('%s: %s' % (k, term_repr(v)) for k, v in step[2].items())
+    #         print('    ', clause, '  /  ', subs, '  /  ', step[1])
+    # else:
+    #     print('NO')
+
+    program.learn(False, 'q', 2, [Literal(Atom('q', (2, 1)))], [])
 
 
 if __name__ == '__main__':
     abstract()
-
-    print(get_invariants(get_combinations(2)))
-    print()
-    print(get_invariants(get_combinations(4)))
