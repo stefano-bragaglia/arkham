@@ -189,6 +189,52 @@ class Literal:
         return Literal(self._atom.substitute(substitutions), self._negated)
 
 
+class Example:
+    def __init__(self, literal: Literal, negative: bool):
+        if not literal or not literal.is_ground():
+            raise ValueError('Examples must be ground: %s' % repr(literal))
+
+        self._literal = literal
+        self._negative = negative
+
+    @property
+    def negative(self) -> bool:
+        return self._negative
+
+    @property
+    def negated(self) -> bool:
+        return self._literal.negated
+
+    @property
+    def functor(self) -> str:
+        return self._literal.functor
+
+    @property
+    def terms(self) -> Iterable[Term]:
+        return self._literal.terms
+
+    def __hash__(self) -> int:
+        return hash(self._literal) ** hash(self._negative)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Example):
+            return False
+
+        if self._negative != other._negative:
+            return False
+
+        return self._literal == other._literal
+
+    def __repr__(self) -> str:
+        return '#%s%s' % ('not ' if self._negative else '', repr(self._literal))
+
+    def get_arity(self) -> int:
+        return self._literal.get_arity()
+
+    def is_ground(self) -> bool:
+        return self._literal.is_ground()
+
+
 class Clause:
     def __init__(self, head: Literal, body: Tuple[Literal, ...] = ()):
         self._head = head
@@ -318,6 +364,38 @@ class Program:
             return derivation
 
         return None
+
+    def foil(self, examples: List[Example], target: Literal) -> List[Clause]:
+        clauses = []
+
+        while any(e.negated == False for e in examples):
+            clause = self.new_clause(examples, target)
+            clauses.append(clause)
+            program = Program((*self._clauses, *clauses))
+            examples = [e for e in examples if not program.resolve(e)]
+
+        return clauses
+
+    def new_clause(self, examples: List[Example], target: Literal) -> Clause:
+        body = []
+
+        extended_examples = [*examples]
+        while any(e.negated == True for e in extended_examples):
+            literal = self.choose_literal(self.new_literals(target, body), extended_examples)
+            body.append(literal)
+            extended_examples = [ee for e in extended_examples for ee in self.extend_example(e, literal)]
+
+        return Clause(target, body)
+
+    def choose_literal(self, literals: List[Literal], examples: List[Example]) -> Literal:
+        for literal in literals:
+            pass
+
+    def new_literals(self, head: Literal, body: List[Literal]) -> List[Literal]:
+        pass
+
+    def extend_example(self, example: Example, literal: Literal) -> List[Example]:
+        pass
 
     def learn(self, target: Literal, positives: List[Literal], negatives: List[Literal]) -> List[Clause]:
         signatures = []
