@@ -30,33 +30,6 @@ def term_repr(term: Term) -> str:
     return repr(term)
 
 
-def get_combinations(size: int) -> List[List[int]]:
-    combinations = [[]]
-    for _ in range(size):
-        updates = []
-        for combination in combinations:
-            for current in range(size):
-                update = [*combination, current]
-                updates.append(update)
-        combinations = updates
-
-    return combinations
-
-
-def get_invariants(combinations: List[List[int]]) -> List[List[int]]:
-    invariants = []
-    for combination in combinations:
-        mapping = {}
-        invariant = []
-        for index in combination:
-            value = mapping.setdefault(index, len(mapping))
-            invariant.append(value)
-        if invariant not in invariants:
-            invariants.append(invariant)
-
-    return invariants[::-1]
-
-
 class Atom:
     def __init__(self, functor: str, terms: Tuple[Term, ...] = ()):
         self._functor = functor
@@ -380,9 +353,9 @@ class Program:
         body = []
 
         extended_examples = [*examples]
-        while any(e.negated == True for e in extended_examples):
+        while any(e.negated for e in extended_examples):
             literal = self.choose_literal(self.new_literals(target, body), extended_examples)
-            body.append(literal)
+            body = (*body, literal)
             extended_examples = [ee for e in extended_examples for ee in self.extend_example(e, literal)]
 
         return Clause(target, body)
@@ -392,52 +365,51 @@ class Program:
             pass
 
     def new_literals(self, head: Literal, body: List[Literal]) -> List[Literal]:
-        pass
+        literals = []
+        count = self._count(head, body)
+        for negated, functor, arity in self._get_signatures():
+            for indexes in self._get_indexes(count, arity):
+                literal = Literal(Atom(functor, tuple('V%d' % i for i in indexes)), negated)
+                if literal not in literals:
+                    literals.append(literal)
+
+        return literals
 
     def extend_example(self, example: Example, literal: Literal) -> List[Example]:
         pass
 
-    def learn(self, target: Literal, positives: List[Literal], negatives: List[Literal]) -> List[Clause]:
+    def _get_signatures(self) -> List[Tuple[bool, str, int]]:
         signatures = []
         for clause in self._clauses:
             signature = (clause.head.negated, clause.head.functor, clause.head.get_arity())
             if signature not in signatures:
                 signatures.append(signature)
-        if (target.negated, target.functor, target.get_arity()) not in signatures:
-            signatures.append((target.negated, target.functor, target.get_arity()))
 
-        clauses = []
+        return signatures
 
-        body = ()
+    @staticmethod
+    def _count(head: Literal, body: List[Literal]) -> int:
+        indexes = {}
+        for literal in {head, *body}:
+            for term in literal.terms:
+                if is_variable(term):
+                    indexes.setdefault(term, len(indexes))
 
-        tp, fp = 0, len(negatives)
-        while tp < len(positives):
-            best, value = None, -inf
-            for signature in signatures:
-                for indexes in get_combinations(signature[2]):
-                    literal = Literal(Atom(signature[1], tuple('V%d' % i for i in indexes)), signature[0])
-                    clause = Clause(target, (*body, literal))
+        return len(indexes)
 
-                    if any(t not in literal.terms for t in target.terms):
-                        continue
+    @staticmethod
+    def _get_indexes(count: int, arity: int) -> List[List[int]]:
+        items = [[]]
+        for _ in range(arity):
+            updates = []
+            for combination in items:
+                for current in range(count + arity - 1):
+                    update = [*combination, current]
+                    updates.append(update)
+            items = updates
+        valid_items = [p for p in items if any(i < count for i in p)]
 
-                    if target.functor == literal.functor and set(target.terms) == set(literal.terms):
-                        continue
-
-                    prog = Program((*clauses, clause, *self._clauses))
-                    current_tp = sum(1 for p in positives if bool(prog.resolve(p)))
-                    current_fp = sum(1 for n in negatives if not bool(prog.resolve(n)))
-                    gain = information_gain(current_tp, current_fp)
-                    if not best or gain > value:
-                        best = clause
-                        value = gain
-                        tp = current_tp
-                        fp = current_fp
-
-            if best:
-                clauses.append(best)
-
-        return clauses
+        return sorted(valid_items, key=lambda x: sum(1 for i in x if i < count))
 
 
 def information_gain(tp: int, fp: int) -> float:
@@ -470,41 +442,6 @@ def get_stubs(head: Signature, signatures: Tuple[Signature, ...], max_size: int 
             stubs = [*stubs, *updates]
 
     return stubs[1:]
-
-
-def get_clauses(stubs: List[List[Signature]]) -> List[Clause]:
-    clauses = []
-    for stub in stubs:
-        size = sum(p.arity for p in stub)
-        combinations = get_combinations(size)
-        invariants = get_invariants(combinations)
-        for indexes in invariants:
-            if indexes[:stub[0].arity] != [0, 1]:
-                continue
-            if any(i not in indexes[stub[0].arity:] for i in indexes[:stub[0].arity]):
-                continue
-
-            literals = []
-            for signature in stub:
-                terms = tuple('V%d' % indexes.pop(0) for _ in range(signature.arity))
-                literal = Literal(Atom(signature.name, terms), signature.negated)
-                if literal not in literals:
-                    literals.append(literal)
-
-            clause = Clause(literals[0], tuple(literals[1:]))
-            if clause not in clauses:
-                clauses.append(clause)
-
-    return clauses
-
-
-def learn(negated: bool, name: str, arity: int, program: Program, max_size: int = 2):
-    signature = Signature(negated, name, arity)
-    signatures = get_signatures(signature, program)
-    stubs = get_stubs(signature, signatures, max_size)
-    clauses = get_clauses(stubs)
-
-    pprint([c for c in clauses])
 
 
 def parenthood():
@@ -571,24 +508,26 @@ def connectedness():
 
 def abstract():
     program = Program((
-        # Clause(Literal(Atom('q', ('X', 'Y'))), (Literal(Atom('p', ('Y', 'X'))),)),
+        Clause(Literal(Atom('q', ('X', 'Y'))), (Literal(Atom('p', ('Y', 'X'))),)),
         Clause(Literal(Atom('p', (1, 2)))),
     ))
     print(program)
-    # print()
-    # derivation = program.resolve(Literal(Atom('q', (2, 1))))
-    # if derivation:
-    #     print('YES')
-    #     for step in derivation:
-    #         clause = program.get_clause(step[0])
-    #         subs = '{%s}' % ', '.join('%s: %s' % (k, term_repr(v)) for k, v in step[2].items())
-    #         print('    ', clause, '  /  ', subs, '  /  ', step[1])
-    # else:
-    #     print('NO')
+    print()
+    query = Literal(Atom('q', (2, 1)))
+    print('?-', query)
+    derivation = program.resolve(query)
+    if derivation:
+        print('YES')
+        for step in derivation:
+            clause = program.get_clause(step[0])
+            subs = '{%s}' % ', '.join('%s: %s' % (k, term_repr(v)) for k, v in step[2].items())
+            print('    ', clause, '  /  ', subs, '  /  ', step[1])
+    else:
+        print('NO')
 
-    result = program.learn(Literal(Atom('q', ('V0', 'V1'))), [Literal(Atom('q', (2, 1)))], [])
-    for clause in result:
-        print('\t', clause)
+    # result = program.learn(Literal(Atom('q', ('V0', 'V1'))), [Literal(Atom('q', (2, 1)))], [])
+    # for clause in result:
+    #     print('\t', clause)
 
 
 if __name__ == '__main__':
