@@ -1,5 +1,4 @@
 import re
-from collections import namedtuple
 from math import inf, log
 from pprint import pprint
 from typing import Dict, List
@@ -417,31 +416,6 @@ def information_gain(tp: int, fp: int) -> float:
         return -inf if fp == 0 else inf
 
     return -log(tp / (tp + fp))
-
-
-Signature = namedtuple('Signature', ['negated', 'name', 'arity'])
-
-
-def get_signatures(head: Signature, program: Program) -> Tuple[Signature, ...]:
-    signatures = sorted({Signature(l._negated, l.functor, l.get_arity()) for c in program.clauses for l in c.literals})
-    if head not in signatures:
-        signatures.append(head)
-
-    return tuple(signatures)
-
-
-def get_stubs(head: Signature, signatures: Tuple[Signature, ...], max_size: int = 2) -> List[List[Signature]]:
-    stubs = [[head]]
-    for _ in range(max_size):
-        for stub in stubs:
-            updates = []
-            for signature in signatures:
-                update = [*stub, signature]
-                if update not in stubs and update not in updates:
-                    updates.append(update)
-            stubs = [*stubs, *updates]
-
-    return stubs[1:]
 
 
 def parenthood():
