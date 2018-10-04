@@ -1,6 +1,5 @@
 import re
 from math import inf, log
-from pprint import pprint
 from typing import Dict, List
 from typing import Iterable
 from typing import Optional
@@ -101,7 +100,7 @@ class Atom:
         return substitutions
 
     def substitute(self, substitutions: Substitutions) -> 'Atom':
-        return Atom(self.functor, tuple(substitutions.get(t, '_') if is_variable(t) else t for t in self._terms))
+        return Atom(self.functor, tuple(substitutions.get(t, t) if is_variable(t) else t for t in self._terms))
 
 
 class Literal:
@@ -162,49 +161,86 @@ class Literal:
 
 
 class Example:
-    def __init__(self, literal: Literal, negative: bool):
-        if not literal or not literal.is_ground():
-            raise ValueError('Examples must be ground: %s' % repr(literal))
+    def __init__(self, facts: Tuple[Literal], positive: bool):
+        if any(not f.is_ground() for f in facts):
+            raise ValueError('Examples should be ground: %s' % ', '.join(repr(f) for f in facts))
 
-        self._literal = literal
-        self._negative = negative
-
-    @property
-    def negative(self) -> bool:
-        return self._negative
+        self._facts = facts
+        self._positive = positive
 
     @property
-    def negated(self) -> bool:
-        return self._literal.negated
+    def facts(self) -> Iterable[Literal]:
+        return self._facts
 
     @property
-    def functor(self) -> str:
-        return self._literal.functor
-
-    @property
-    def terms(self) -> Iterable[Term]:
-        return self._literal.terms
+    def positive(self) -> bool:
+        return self._positive
 
     def __hash__(self) -> int:
-        return hash(self._literal) ** hash(self._negative)
+        value = hash(self._positive)
+        for literal in self._facts:
+            value = value ** hash(literal)
+
+        return value
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Example):
             return False
 
-        if self._negative != other._negative:
+        if self._positive != other._positive:
             return False
 
-        return self._literal == other._literal
+        if len(self._facts) != len(other._facts):
+            return False
+
+        for i, literal in enumerate(self._facts):
+            if literal != other._facts[i]:
+                return False
+
+        return True
 
     def __repr__(self) -> str:
-        return '#%s%s' % ('not ' if self._negative else '', repr(self._literal))
+        return '(%s) %s' % (['-', '+'][self._positive], ', '.join(repr(l) for l in self._facts))
 
-    def get_arity(self) -> int:
-        return self._literal.get_arity()
+    def get_substitution(self, literals: List[Literal]) -> Optional[Substitutions]:
+        substitutions = {}
+        for i, literal in enumerate(literals):
+            literal = literal.substitute(substitutions)
+            changes = literal.unify(self._facts[i])
+            if changes is None or any(substitutions[k] != v for k, v in changes.items() if k in substitutions):
+                return None
 
-    def is_ground(self) -> bool:
-        return self._literal.is_ground()
+            substitutions.update(changes)
+
+        return substitutions
+
+    def extend(self, body: List[Literal], literal: Literal, constants: List[Term]) -> List['Example']:
+        substitutions = self.get_substitution(body)
+        if substitutions is None:
+            return []
+
+        examples, visited, frontier = [], [], [literal.substitute(substitutions)]
+        while frontier:
+            current = frontier.pop(0)
+            if current.is_ground():
+                if current not in visited:
+                    example = Example((*self._facts, current), self._positive)
+                    examples.append(example)
+                    visited.append(current)
+            else:
+                for term in current.terms:
+                    if is_variable(term):
+                        for constant in constants:
+                            lit = current.substitute({term: constant})
+                            if lit not in visited:
+                                frontier.append(lit)
+                        break
+
+        return examples
+
+        print(pattern)
+
+        pass
 
 
 class Clause:
@@ -339,8 +375,7 @@ class Program:
 
     def foil(self, examples: List[Example], target: Literal) -> List[Clause]:
         clauses = []
-
-        while any(e.negated == False for e in examples):
+        while any(e.positive for e in examples):
             clause = self.new_clause(examples, target)
             clauses.append(clause)
             program = Program((*self._clauses, *clauses))
@@ -349,19 +384,29 @@ class Program:
         return clauses
 
     def new_clause(self, examples: List[Example], target: Literal) -> Clause:
-        body = []
-
-        extended_examples = [*examples]
-        while any(e.negated for e in extended_examples):
-            literal = self.choose_literal(self.new_literals(target, body), extended_examples)
-            body = (*body, literal)
-            extended_examples = [ee for e in extended_examples for ee in self.extend_example(e, literal)]
+        body, current_examples = [], [*examples]
+        while any(not e.positive for e in current_examples):
+            candidates = self.new_literals(target, body)
+            literal, extended_examples = self.choose_literal(candidates, current_examples)
+            if literal:
+                body = (*body, literal)
+                current_examples = extended_examples
 
         return Clause(target, body)
 
-    def choose_literal(self, literals: List[Literal], examples: List[Example]) -> Literal:
+    def choose_literal(self, literals: List[Literal], examples: List[Example]) -> Tuple[Literal, List[Example]]:
+        best, literal, extended_examples = None, None, None
         for literal in literals:
-            pass
+            max_gain = cover(examples, literal) * information(examples)
+            if best is not None and max_gain < best:
+                continue
+
+            future_examples = [ee for e in extended_examples for ee in self.extend(e, literal)]
+            gain = cover(examples, literal) * (information(examples) - information(future_examples))
+            if best is None or gain > best:
+                best, literal, extended_examples = gain, literal, future_examples
+
+        return literal, extended_examples
 
     def new_literals(self, head: Literal, body: List[Literal]) -> List[Literal]:
         literals = []
@@ -374,8 +419,8 @@ class Program:
 
         return literals
 
-    def extend_example(self, example: Example, literal: Literal) -> List[Example]:
-        pass
+    def extend(self, example: Example, literal: Literal) -> List[Example]:
+        raise NotImplementedError
 
     def _get_signatures(self) -> List[Tuple[bool, str, int]]:
         signatures = []
@@ -389,7 +434,7 @@ class Program:
     @staticmethod
     def _count(head: Literal, body: List[Literal]) -> int:
         indexes = {}
-        for literal in {head, *body}:
+        for literal in [*body, head]:
             for term in literal.terms:
                 if is_variable(term):
                     indexes.setdefault(term, len(indexes))
@@ -411,11 +456,23 @@ class Program:
         return sorted(valid_items, key=lambda x: sum(1 for i in x if i < count))
 
 
-def information_gain(tp: int, fp: int) -> float:
-    if tp == 0:
-        return -inf if fp == 0 else inf
+def max_gain(examples: List[Example], literal: Literal) -> float:
+    return cover(examples, literal) * information(examples)
 
-    return -log(tp / (tp + fp))
+
+def cover(examples: List[Example], literal: Literal) -> int:
+    return sum(1 for e in examples if e.positive and literal.unify(e.literal))
+
+
+def information(examples: List[Example]) -> float:
+    if not examples:
+        return -inf
+
+    pos = sum(1 for e in examples if e.positive)
+    if pos == 0:
+        return inf
+
+    return -log(pos / len(examples))  # / log(2)
 
 
 def parenthood():
@@ -463,21 +520,25 @@ def connectedness():
     print(program)
     print()
 
-    positives = []
-    negatives = []
-    constants = program.get_constants()
-    for c1 in constants:
-        for c2 in constants:
-            clause = Clause(Literal(Atom('edge', (c1, c2))))
-            if clause not in program.clauses:
-                negatives.append(Literal(Atom('path', (c1, c2)), True))
-            else:
-                positives.append(Literal(Atom('path', (c1, c2)), False))
+    examples = []
+    for x in range(9):
+        for y in range(9):
+            fact = Literal(Atom('edge', (x, y)))
+            positive = Clause(fact) in program.clauses
+            examples.append(Example((fact, ), positive))
+    target = Literal(Atom('path', ('X', 'Y')))
+    result = program.foil(examples, target)
+    for clause in result:
+        print(clause)
 
-    pprint(positives)
-    pprint(negatives)
-
-    # learn(False, 'path', 2, program)
+    #
+    #
+    # e = Example((Literal(Atom('edge', (0, 1))),), True)
+    # print(e.extend(
+    #     [Literal(Atom('edge', ('X', 'Z')))],
+    #     Literal(Atom('path', ('Z', 'Y'))),
+    #     [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    # ))
 
 
 def abstract():
@@ -505,4 +566,5 @@ def abstract():
 
 
 if __name__ == '__main__':
-    abstract()
+    # abstract()
+    connectedness()
