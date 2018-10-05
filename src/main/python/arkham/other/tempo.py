@@ -161,12 +161,13 @@ class Literal:
 
 
 class Example:
-    def __init__(self, facts: Tuple[Literal], positive: bool):
+    def __init__(self, facts: Tuple[Literal], positive: bool, substitutions: Substitutions = None):
         if any(not f.is_ground() for f in facts):
             raise ValueError('Examples should be ground: %s' % ', '.join(repr(f) for f in facts))
 
         self._facts = facts
         self._positive = positive
+        self._substitutions = substitutions if substitutions else {}
 
     @property
     def facts(self) -> Iterable[Literal]:
@@ -214,33 +215,44 @@ class Example:
 
         return substitutions
 
-    def extend(self, body: List[Literal], literal: Literal, constants: List[Term]) -> List['Example']:
-        substitutions = self.get_substitution(body)
-        if substitutions is None:
+    def is_covered(self, literal: Literal) -> bool:
+        return self._positive and literal.unify(self._facts[-1])
+
+    def extend(self, literal: Literal, constants: Iterable[Term]) -> List['Example']:
+        # substitutions = self.get_substitution(body)
+        # if substitutions is None:
+        #     return []
+
+        literal = literal.substitute(self._substitutions)
+        if not literal:
             return []
 
-        examples, visited, frontier = [], [], [literal.substitute(substitutions)]
-        while frontier:
-            current = frontier.pop(0)
-            if current.is_ground():
-                if current not in visited:
-                    example = Example((*self._facts, current), self._positive)
-                    examples.append(example)
-                    visited.append(current)
-            else:
-                for term in current.terms:
-                    if is_variable(term):
-                        for constant in constants:
-                            lit = current.substitute({term: constant})
-                            if lit not in visited:
-                                frontier.append(lit)
-                        break
+        combinations = [{}]
+        for variable in literal.terms:
+            if is_variable(variable):
+                updates = []
+                for combination in combinations:
+                    for constant in constants:
+                        update = {**combination, variable: constant}
+                        updates.append(update)
+                combinations = updates
+
+        examples = []
+        for combination in combinations:
+            if any(self._substitutions[v] != c for v, c in combination.items() if v in self._substitutions):
+                continue
+
+            facts = [*self._facts]
+            fact = literal.substitute(combination)
+            if fact not in facts:
+                facts.append(fact)
+
+            substitutions = {**self._substitutions, **combination}
+            example = Example(tuple(facts), self._positive, substitutions)
+            if example not in examples:
+                examples.append(example)
 
         return examples
-
-        print(pattern)
-
-        pass
 
 
 class Clause:
@@ -395,13 +407,19 @@ class Program:
         return Clause(target, body)
 
     def choose_literal(self, literals: List[Literal], examples: List[Example]) -> Tuple[Literal, List[Example]]:
-        best, literal, extended_examples = None, None, None
+        best, literal, extended_examples = None, None, examples
         for literal in literals:
-            max_gain = cover(examples, literal) * information(examples)
+            max_gain = cover(extended_examples, literal) * information(extended_examples)
             if best is not None and max_gain < best:
                 continue
 
-            future_examples = [ee for e in extended_examples for ee in self.extend(e, literal)]
+            # future_examples = []
+            # for example in extended_examples:
+            #     for e in example.extend(literal, self.get_constants()):
+            #         if e not in future_examples:
+            #             future_examples.append(e)
+
+            future_examples = [ee for e in extended_examples for ee in e.extend(literal, self.get_constants())]
             gain = cover(examples, literal) * (information(examples) - information(future_examples))
             if best is None or gain > best:
                 best, literal, extended_examples = gain, literal, future_examples
@@ -456,12 +474,12 @@ class Program:
         return sorted(valid_items, key=lambda x: sum(1 for i in x if i < count))
 
 
+def cover(examples: List[Example], literal: Literal) -> int:
+    return sum(1 for e in examples if e.is_covered(literal))
+
+
 def max_gain(examples: List[Example], literal: Literal) -> float:
     return cover(examples, literal) * information(examples)
-
-
-def cover(examples: List[Example], literal: Literal) -> int:
-    return sum(1 for e in examples if e.positive and literal.unify(e.literal))
 
 
 def information(examples: List[Example]) -> float:
@@ -525,7 +543,7 @@ def connectedness():
         for y in range(9):
             fact = Literal(Atom('edge', (x, y)))
             positive = Clause(fact) in program.clauses
-            examples.append(Example((fact, ), positive))
+            examples.append(Example((fact,), positive))
     target = Literal(Atom('path', ('X', 'Y')))
     result = program.foil(examples, target)
     for clause in result:
