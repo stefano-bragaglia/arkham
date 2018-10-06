@@ -9,7 +9,7 @@ from typing import Union
 Value = Union[bool, float, int, str]
 Variable = str
 Term = Union[Value, Variable]
-Substitutions = Dict[Variable, Term]
+Substitution = Dict[Variable, Term]
 
 _var_pattern = re.compile(r'[_A-Z][_a-zA-Z0-9]*')
 
@@ -76,7 +76,7 @@ class Atom:
     def is_ground(self) -> bool:
         return all(not is_variable(t) for t in self._terms)
 
-    def unify(self, other: 'Atom') -> Optional[Substitutions]:
+    def unify(self, other: 'Atom') -> Optional[Substitution]:
         if not isinstance(other, Atom):
             return None
 
@@ -86,21 +86,21 @@ class Atom:
         if len(self._terms) != len(other._terms):
             return None
 
-        substitutions = {}
+        substitution = {}
         for i, term in enumerate(self._terms):
             if is_variable(term):
-                if term not in substitutions:
-                    substitutions[term] = other._terms[i]
-                elif substitutions[term] != other._terms[i]:
+                if term not in substitution:
+                    substitution[term] = other._terms[i]
+                elif substitution[term] != other._terms[i]:
                     return None
 
             elif term != other._terms[i]:
                 return None
 
-        return substitutions
+        return substitution
 
-    def substitute(self, substitutions: Substitutions) -> 'Atom':
-        return Atom(self.functor, tuple(substitutions.get(t, t) if is_variable(t) else t for t in self._terms))
+    def substitute(self, substitution: Substitution) -> 'Atom':
+        return Atom(self.functor, tuple(substitution.get(t, t) if is_variable(t) else t for t in self._terms))
 
 
 class Literal:
@@ -147,7 +147,7 @@ class Literal:
     def is_ground(self) -> bool:
         return self._atom.is_ground()
 
-    def unify(self, other: 'Literal') -> Optional[Substitutions]:
+    def unify(self, other: 'Literal') -> Optional[Substitution]:
         if not isinstance(other, Literal):
             return None
 
@@ -156,103 +156,8 @@ class Literal:
 
         return self._atom.unify(other._atom)
 
-    def substitute(self, substitutions: Substitutions) -> 'Literal':
-        return Literal(self._atom.substitute(substitutions), self._negated)
-
-
-class Example:
-    def __init__(self, facts: Tuple[Literal], positive: bool, substitutions: Substitutions = None):
-        if any(not f.is_ground() for f in facts):
-            raise ValueError('Examples should be ground: %s' % ', '.join(repr(f) for f in facts))
-
-        self._facts = facts
-        self._positive = positive
-        self._substitutions = substitutions if substitutions else {}
-
-    @property
-    def facts(self) -> Iterable[Literal]:
-        return self._facts
-
-    @property
-    def positive(self) -> bool:
-        return self._positive
-
-    def __hash__(self) -> int:
-        value = hash(self._positive)
-        for literal in self._facts:
-            value = value ** hash(literal)
-
-        return value
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, Example):
-            return False
-
-        if self._positive != other._positive:
-            return False
-
-        if len(self._facts) != len(other._facts):
-            return False
-
-        for i, literal in enumerate(self._facts):
-            if literal != other._facts[i]:
-                return False
-
-        return True
-
-    def __repr__(self) -> str:
-        return '(%s) %s' % (['-', '+'][self._positive], ', '.join(repr(l) for l in self._facts))
-
-    def get_substitution(self, literals: List[Literal]) -> Optional[Substitutions]:
-        substitutions = {}
-        for i, literal in enumerate(literals):
-            literal = literal.substitute(substitutions)
-            changes = literal.unify(self._facts[i])
-            if changes is None or any(substitutions[k] != v for k, v in changes.items() if k in substitutions):
-                return None
-
-            substitutions.update(changes)
-
-        return substitutions
-
-    def is_covered(self, literal: Literal) -> bool:
-        return self._positive and literal.unify(self._facts[-1])
-
-    def extend(self, literal: Literal, constants: Iterable[Term]) -> List['Example']:
-        # substitutions = self.get_substitution(body)
-        # if substitutions is None:
-        #     return []
-
-        literal = literal.substitute(self._substitutions)
-        if not literal:
-            return []
-
-        combinations = [{}]
-        for variable in literal.terms:
-            if is_variable(variable):
-                updates = []
-                for combination in combinations:
-                    for constant in constants:
-                        update = {**combination, variable: constant}
-                        updates.append(update)
-                combinations = updates
-
-        examples = []
-        for combination in combinations:
-            if any(self._substitutions[v] != c for v, c in combination.items() if v in self._substitutions):
-                continue
-
-            facts = [*self._facts]
-            fact = literal.substitute(combination)
-            if fact not in facts:
-                facts.append(fact)
-
-            substitutions = {**self._substitutions, **combination}
-            example = Example(tuple(facts), self._positive, substitutions)
-            if example not in examples:
-                examples.append(example)
-
-        return examples
+    def substitute(self, substitution: Substitution) -> 'Literal':
+        return Literal(self._atom.substitute(substitution), self._negated)
 
 
 class Clause:
@@ -310,8 +215,115 @@ class Clause:
     def is_ground(self) -> bool:
         return all(l.is_ground() for l in self.literals)
 
-    def substitute(self, substitutions: Substitutions) -> 'Clause':
-        return Clause(self._head.substitute(substitutions), tuple(l.substitute(substitutions) for l in self._body))
+    def substitute(self, substitution: Substitution) -> 'Clause':
+        return Clause(self._head.substitute(substitution), tuple(l.substitute(substitution) for l in self._body))
+
+
+class Assignment:
+    def __init__(self, substitution: Substitution, positive: bool):
+        self._substitution = substitution
+        self._positive = positive
+
+    def __repr__(self) -> str:
+        return '(%s) {%s}' % (
+            ['-', '+'][self._positive],
+            ', '.join('%s: %s' % (k, term_repr(v)) for k, v in sorted(self._substitution.items())),
+        )
+
+    @property
+    def substitution(self) -> Substitution:
+        return self._substitution
+
+    @property
+    def positive(self) -> bool:
+        return self._positive
+
+    def extend(self, literal: Literal, ground: List[Literal]) -> List['Assignment']:
+        literal = literal.substitute(self._substitution)
+        if not literal:
+            return []
+
+        table = {}
+        for fact in ground:
+            substitution = literal.unify(fact)
+            if substitution:
+                for variable, constant in substitution.items():
+                    table.setdefault(variable, set()).add(constant)
+
+        result = [self]
+        for variable, constants in table.items():
+            result = [Assignment({**s._substitution, variable: c}, self._positive) for c in constants for s in result]
+
+        return result
+
+    def satisfy(self, literal: Literal, ground: List[Literal]) -> bool:
+        literal = literal.substitute(self._substitution)
+        if not literal:
+            return False
+
+        return any(bool(literal.unify(fact)) for fact in ground)
+
+
+class Example:
+    def __init__(self, fact: Literal, positive: bool):
+        if not fact.is_ground():
+            raise ValueError('Examples should be ground: %s' % repr(fact))
+
+        self._fact = fact
+        self._positive = positive
+
+    def __hash__(self) -> int:
+        return hash(self._fact) * hash(self._positive)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Example):
+            return False
+
+        if self._positive != other._positive:
+            return False
+
+        return self._fact == other._fact
+
+    def __repr__(self) -> str:
+        return '(%s) %s' % (['-', '+'][self._positive], repr(self._fact))
+
+    @property
+    def fact(self) -> Literal:
+        return self._fact
+
+    @property
+    def positive(self) -> bool:
+        return self._positive
+
+    def get_assignment(self, target: Literal) -> Optional[Assignment]:
+        substitution = target.unify(self._fact)
+        if not substitution:
+            return None
+
+        return Assignment(substitution, self._positive)
+
+
+class TrainingSet:
+    def __init__(self, assignments: List[Assignment]):
+        self._assignments = assignments
+
+    def __repr__(self) -> str:
+        return '\n'.join(repr(a) for a in self._assignments)
+
+    @property
+    def assignments(self) -> Iterable[Assignment]:
+        return self._assignments
+
+    def extend(self, literal: Literal, ground: List[Literal]) -> Tuple[int, List[Assignment]]:
+        count, result = 0, []
+        for assignment in self._assignments:
+            if assignment.satisfy(literal, ground):
+                count += 1
+                for extension in assignment.extend(literal, ground):
+                    if extension not in result:
+                        result.append(extension)
+
+        return count, result
 
 
 class Program:
@@ -345,7 +357,7 @@ class Program:
     def get_clause(self, index: int) -> Optional[Clause]:
         return self._clauses[index] if 0 <= index < len(self._clauses) else None
 
-    def get_constants(self) -> Iterable[Term]:
+    def get_constants(self) -> List[Term]:
         return sorted({t for c in self._clauses for l in c.literals for t in l.terms if not is_variable(t)})
 
     def get_facts(self) -> Iterable[Clause]:
@@ -357,24 +369,24 @@ class Program:
     def is_ground(self) -> bool:
         return all(c.is_ground() for c in self._clauses)
 
-    def resolve(self, query: Literal) -> Optional[List[Tuple[int, Literal, Substitutions]]]:
+    def resolve(self, query: Literal) -> Optional[List[Tuple[int, Literal, Substitution]]]:
         if not query.is_ground():
             raise ValueError("'query' must be ground: %s" % query)
 
         return self._tabling.setdefault(query, self._resolve(query))
 
-    def _resolve(self, query: Literal) -> Optional[List[Tuple[int, Literal, Substitutions]]]:
+    def _resolve(self, query: Literal) -> Optional[List[Tuple[int, Literal, Substitution]]]:
         for i, clause in enumerate(self._clauses):
-            substitutions = clause.head.unify(query)
-            if substitutions is None:
+            substitution = clause.head.unify(query)
+            if substitution is None:
                 continue
 
-            derivation = [(i, query, substitutions)]
+            derivation = [(i, query, substitution)]
             if not clause.body:
                 return derivation
 
             for query in clause.body:
-                substituted = query.substitute(substitutions)
+                substituted = query.substitute(substitution)
                 sub_goal = self.resolve(substituted)
                 if not sub_goal:
                     return None
@@ -385,18 +397,48 @@ class Program:
 
         return None
 
-    def foil(self, examples: List[Example], target: Literal) -> List[Clause]:
+    def get_world(self) -> List[Literal]:
+        table = {}
         clauses = []
-        while any(e.positive for e in examples):
-            clause = self.new_clause(examples, target)
+        root = Root()
+        for rule in self._clauses:
+            if rule.is_fact():
+                clauses.append(rule)
+            else:
+                beta = None
+                for lit in rule.body:
+                    name = repr(lit)
+                    alpha = table.setdefault(name, Alpha(lit, root))
+                    if beta is None:
+                        beta = alpha
+                    else:
+                        name = '%s, %s' % (beta.name, alpha.name)
+                        beta = table.setdefault(name, Beta(beta, alpha))
+                Leaf(rule, beta, root, clauses)
+
+        for fact in self.get_facts():
+            root.notify(fact.head)
+
+        return list({c.head for c in clauses})
+
+    def foil(self, target: Literal, examples: List[Example]) -> List[Clause]:
+        training_set = TrainingSet([e.get_assignment(target) for e in examples])
+
+        ground = self.get_world()
+
+        clauses = []
+        while any(e.positive for e in training_set.assignments):
+            clause = self.new_clause(target, training_set)
+            if not clause:
+                raise ValueError("Shouldn't have happened")
+
             clauses.append(clause)
-            program = Program((*self._clauses, *clauses))
-            examples = [e for e in examples if not program.resolve(e)]
+            training_set = TrainingSet([a for a in training_set.assignments if not a.satisfy(target, ground)])
 
         return clauses
 
-    def new_clause(self, examples: List[Example], target: Literal) -> Clause:
-        body, current_examples = [], [*examples]
+    def new_clause(self, target: Literal, training_set: TrainingSet) -> Clause:
+        body, current_examples = [], training_set
         while any(not e.positive for e in current_examples):
             candidates = self.new_literals(target, body)
             literal, extended_examples = self.choose_literal(candidates, current_examples)
@@ -406,8 +448,8 @@ class Program:
 
         return Clause(target, body)
 
-    def choose_literal(self, literals: List[Literal], examples: List[Example]) -> Tuple[Literal, List[Example]]:
-        best, literal, extended_examples = None, None, examples
+    def choose_literal(self, literals: List[Literal], training_set: TrainingSet) -> Tuple[Literal, List[Example]]:
+        best, literal, extended_examples = None, None, training_set
         for literal in literals:
             max_gain = cover(extended_examples, literal) * information(extended_examples)
             if best is not None and max_gain < best:
@@ -439,6 +481,17 @@ class Program:
 
     def extend(self, example: Example, literal: Literal) -> List[Example]:
         raise NotImplementedError
+
+    # def extend(self, literal: Literal, ground: List[Literal]) -> Tuple[int, List[Assignment]]:
+    #     count, result = 0, []
+    #     for assignment in self._assignments:
+    #         if assignment.satisfy(literal, ground):
+    #             count += 1
+    #             for extension in assignment.extend(literal, ground):
+    #                 if extension not in result:
+    #                     result.append(extension)
+    #
+    #     return count, result
 
     def _get_signatures(self) -> List[Tuple[bool, str, int]]:
         signatures = []
@@ -472,6 +525,102 @@ class Program:
         valid_items = [p for p in items if any(i < count for i in p)]
 
         return sorted(valid_items, key=lambda x: sum(1 for i in x if i < count))
+
+
+Payload = Tuple[List[Literal], Substitution]
+
+
+class Root:
+    def __init__(self):
+        self.children = set()
+
+    def notify(self, ground: Literal):
+        for child in self.children:
+            child.notify(ground, {}, self)
+
+
+class Alpha:
+    def __init__(self, pattern: 'Literal', parent: Root):
+        self.parent = parent
+        self.pattern = pattern
+        self.name = repr(pattern)
+        self.memory = []
+        self.children = set()
+        parent.children.add(self)
+
+    def notify(self, ground: Literal, substitution: Substitution, parent: Root):
+        substitution = self.pattern.unify(ground)
+        if substitution is not None:
+            payload = ([ground], substitution)
+            if payload not in self.memory:
+                self.memory.append(payload)
+                for child in self.children:
+                    child.notify([ground], substitution, self)
+
+
+Node = Union[Alpha, 'Beta']
+
+
+class Beta:
+    def __init__(self, parent_1: Node, parent_2: Alpha):
+        self.parent_1 = parent_1
+        self.parent_2 = parent_2
+        self.name = '%s, %s' % (parent_1.name, parent_2.name)
+        self.memory = []
+        self.children = set()
+        parent_1.children.add(self)
+        parent_2.children.add(self)
+
+    def notify(self, ground: List[Literal], substitution: Substitution, parent: Node):
+        if parent is self.parent_1:
+            for ground_2, subs_2 in self.parent_2.memory:
+                self._notify(ground, substitution, ground_2, subs_2)
+        elif parent is self.parent_2:
+            for ground_1, subs_1 in self.parent_1.memory:
+                self._notify(ground_1, subs_1, ground, substitution)
+
+    @staticmethod
+    def _unify(substitution_1: Substitution, substitution_2: Substitution) -> Optional[Substitution]:
+        for var in set(substitution_1).intersection(substitution_2):
+            if substitution_1[var] != substitution_2[var]:
+                return None
+
+        return {**substitution_1, **substitution_2}
+
+    def _notify(self, ground_1: List[Literal], substitution_1: Substitution,
+                ground_2: List['Literal'], substitution_2: Substitution):
+        subs = self._unify(substitution_1, substitution_2)
+        if subs is not None:
+            ground = [*ground_1, *ground_2]
+            payload = (ground, subs)
+            if payload not in self.memory:
+                self.memory.append(payload)
+                for child in self.children:
+                    child.notify(ground, subs, self)
+
+
+class Leaf:
+    def __init__(self, clause: Clause, parent: Node, root: Root, agenda: List[Clause]):
+        self.parent = parent
+        self.clause = clause
+        self.name = repr(clause)
+        self.memory = []
+
+        self.root = root
+        self.agenda = agenda
+        parent.children.add(self)
+
+    def notify(self, ground: List[Literal], substitution: Substitution, parent: Node):
+        payload = (ground, substitution)
+        if payload not in self.memory:
+            self.memory.append(payload)
+
+            literal = self.clause.head.substitute(substitution)
+            clause = Clause(literal, (*ground,))
+            if clause not in self.agenda:
+                self.agenda.append(clause)
+
+            self.root.notify(literal)
 
 
 def cover(examples: List[Example], literal: Literal) -> int:
@@ -585,4 +734,32 @@ def abstract():
 
 if __name__ == '__main__':
     # abstract()
-    connectedness()
+    # connectedness()
+
+    p = Program((
+        Clause(Literal(Atom('edge', (0, 1)))),
+        Clause(Literal(Atom('edge', (0, 3)))),
+        Clause(Literal(Atom('edge', (1, 2)))),
+        Clause(Literal(Atom('edge', (3, 2)))),
+        Clause(Literal(Atom('edge', (3, 4)))),
+        Clause(Literal(Atom('edge', (4, 5)))),
+        Clause(Literal(Atom('edge', (4, 6)))),
+        Clause(Literal(Atom('edge', (6, 8)))),
+        Clause(Literal(Atom('edge', (7, 6)))),
+        Clause(Literal(Atom('edge', (7, 8)))),
+    ))
+
+    tgt = Literal(Atom('path', ('X', 'Y')))
+    lt1 = Literal(Atom('edge', ('X', 'Y')))
+    lt2 = Literal(Atom('edge', ('X', 'Z')))
+
+    cons = [i for i in range(9)]
+
+    a1 = Assignment({'X': 0, 'Y': 1}, True)
+    a2 = Assignment({'X': 0, 'Y': 7}, False)
+
+    t1 = TrainingSet([a1, a2])
+
+    print(t1)
+
+    print(t1.extend(lt2, p.get_world()))
